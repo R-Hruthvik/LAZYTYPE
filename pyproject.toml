@@ -1,0 +1,89 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voiceflow"
+version = "0.1.0"
+description = "Free WhisperFlow alternative — always-on STT dictation for Ubuntu Linux"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "VoiceFlow Contributors" }]
+
+dependencies = [
+    # Audio
+    "PyAudio>=0.2.14",
+    "webrtcvad>=2.0.10",
+    "numpy>=1.24",
+    # STT providers
+    "groq>=0.9.0",
+    "openai>=1.30.0",          # used for NVIDIA NIM (OpenAI-compat)
+    "deepgram-sdk>=3.5.0",
+    "assemblyai>=0.29.0",
+    "faster-whisper>=1.0.0",   # local CPU fallback
+    # UI
+    "PyQt6>=6.6.0",
+    "pystray>=0.19",
+    "Pillow>=10.0",
+    # TUI
+    "rich>=13.7",
+    "textual>=0.61",
+    # Config & utils
+    "tomli>=2.0; python_version < '3.11'",
+    "tomli-w>=1.0",
+    "setuptools<70",           # required for webrtcvad (pkg_resources)
+    "pynput>=1.7",             # hotkey fallback (X11)
+    "evdev>=1.7; sys_platform == 'linux'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "black>=24.0",
+    "pylint>=3.0",
+    "mypy>=1.9",
+]
+
+[project.scripts]
+voiceflow = "voiceflow.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["voiceflow*"]
+
+[tool.black]
+line-length = 100
+
+[tool.pylint.main]
+fail-under = 9.0
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.pylint.messages_control]
+disable = [
+    "too-few-public-methods",
+    "duplicate-code",
+    "too-many-instance-attributes",
+    "too-many-arguments",
+    "too-many-locals",
+    "too-many-branches",
+    "too-many-statements",
+    "broad-exception-caught",
+    "import-outside-toplevel",
+    "missing-class-docstring",
+    "missing-function-docstring",
+]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_configs = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

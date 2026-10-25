@@ -1,0 +1,37 @@
+# Audio capture & processing
+PyAudio>=0.2.14
+webrtcvad>=2.0.10
+numpy>=1.24
+
+# Cloud STT providers
+groq>=0.9.0
+openai>=1.30.0
+deepgram-sdk>=3.5.0
+assemblyai>=0.29.0
+
+# Local STT fallback
+faster-whisper>=1.0.0
+
+# UI — system tray, OSD overlay
+PyQt6>=6.6.0
+pystray>=0.19
+Pillow>=10.0
+
+# Terminal UI
+rich>=13.7
+textual>=0.61
+
+# Configuration
+tomli-w>=1.0
+setuptools<70
+
+# Hotkey listeners
+pynput>=1.7
+evdev>=1.7
+
+# Dev extras
+pytest>=8.0
+pytest-asyncio>=0.23
+pytest-cov>=5.0
+black>=24.0
+pylint>=3.0

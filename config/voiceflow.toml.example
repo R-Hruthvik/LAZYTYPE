@@ -1,0 +1,83 @@
+# VoiceFlow configuration
+# API keys are NOT stored here — set them in ~/.bashrc:
+#   export GROQ_API_KEY="gsk_..."
+#   export NVIDIA_API_KEY="nvapi-..."
+#   export DEEPGRAM_API_KEY="..."
+#   export ASSEMBLYAI_API_KEY="..."
+
+[general]
+# Key to hold for push-to-talk (evdev key name)
+# Common options: KEY_RIGHTCTRL, KEY_RIGHTALT, KEY_CAPSLOCK, KEY_F9
+hotkey = "KEY_RIGHTCTRL"
+
+# push_to_talk: hold key to record, release to transcribe
+# toggle: press once to start, press again to stop
+mode = "push_to_talk"
+
+# BCP-47 language code
+language = "en"
+
+# auto | xdotool | ydotool | clipboard
+inject_method = "auto"
+
+# Show floating OSD overlay while recording/transcribing
+osd_enabled = true
+
+# Show system tray icon
+tray_enabled = true
+
+[providers]
+# Priority order — first available wins. Falls back down the list.
+# API keys come from env vars, never from this file.
+priority = ["groq", "nvidia", "deepgram", "assemblyai", "local"]
+
+# Environment variable names for each provider's API key
+[providers.env_vars]
+groq = "GROQ_API_KEY"
+nvidia = "NVIDIA_API_KEY"
+deepgram = "DEEPGRAM_API_KEY"
+assemblyai = "ASSEMBLYAI_API_KEY"
+
+# Local faster-whisper model (used when all cloud providers fail)
+# Options: tiny.en | base.en | small.en | medium.en | large-v3
+local_model = "base.en"
+
+# Cool down a provider after this many consecutive errors
+cooldown_after_errors = 3
+
+# How long (seconds) to wait before retrying a cooled-down provider
+cooldown_seconds = 60
+
+[vad]
+# Filter silence before sending to STT (saves API quota)
+enabled = true
+
+# 0 = least aggressive (keeps more audio)
+# 3 = most aggressive (only clear speech passes)
+aggressiveness = 2
+
+[audio]
+# Microphone sample rate (Hz) — all providers expect 16000
+sample_rate = 16000
+
+# Frame duration for VAD (must be 10, 20, or 30 ms)
+chunk_duration_ms = 30
+
+# Audio device index (null = system default)
+# Run `voiceflow --list-devices` to see available devices
+device_index = 0
+
+[streaming]
+# Maximum recording length per hotkey press (seconds)
+max_window_seconds = 30
+
+# Auto-stop recording after this many ms of silence (0 = disabled)
+silence_timeout_ms = 1500
+
+[osd]
+# Position of the floating overlay bar
+# Options: bottom-center | top-center | top-left | bottom-right
+position = "bottom-center"
+
+# Auto-dismiss result overlay after this many ms
+dismiss_after_ms = 2500
