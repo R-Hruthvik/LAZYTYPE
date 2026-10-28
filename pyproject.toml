@@ -3,13 +3,13 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "voiceflow"
+name = "lazytype"
 version = "0.1.0"
 description = "Free WhisperFlow alternative — always-on STT dictation for Ubuntu Linux"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
-authors = [{ name = "VoiceFlow Contributors" }]
+authors = [{ name = "LAZYTYPE Contributors" }]
 
 dependencies = [
     # Audio
@@ -48,6 +48,7 @@ dev = [
 ]
 
 [project.scripts]
+lazytype = "voiceflow.__main__:main"
 voiceflow = "voiceflow.__main__:main"
 
 [tool.setuptools.packages.find]
