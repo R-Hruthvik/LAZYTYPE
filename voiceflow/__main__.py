@@ -259,6 +259,7 @@ async def _run_daemon(config) -> None:
             position=config.osd_position,
             dismiss_after_ms=config.osd_dismiss_after_ms,
             notification_mode=config.notification_mode,
+            show_errors=config.osd_show_errors,
         )
         if config.osd_enabled
         else None
@@ -751,11 +752,8 @@ if [ -x "$VENV_PYTHON" ]; then
         exec "$VENV_PYTHON" -m voiceflow "$@" >> "$LOG_FILE" 2>&1
     fi
 else
-    if [ -t 1 ] || [ $# -gt 0 ]; then
-        exec python3 -m voiceflow "$@"
-    else
-        exec python3 -m voiceflow "$@" >> "$LOG_FILE" 2>&1
-    fi
+    echo "VoiceFlow error: No virtual environment found at $REPO_DIR/.venv or $HOME/.local/share/voiceflow/venv" >&2
+    exit 1
 fi
 """
     launcher.write_text(launcher_content)
@@ -780,20 +778,24 @@ X-systemd-skip=true
 
     service_content = f"""[Unit]
 Description=VoiceFlow — System-wide STT Sleeping Daemon
-After=default.target pipewire.service pipewire-pulse.service
+PartOf=graphical-session.target
+After=graphical-session.target pipewire.service pipewire-pulse.service
 Wants=pipewire.service pipewire-pulse.service
+StartLimitIntervalSec=30
+StartLimitBurst=5
 
 [Service]
 Type=simple
 ExecStart={launcher}
-Restart=always
+Restart=on-failure
 RestartSec=3
 KillMode=mixed
 TimeoutStopSec=5
 SuccessExitStatus=0 143 15
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
 """
     service_file.write_text(service_content)
 

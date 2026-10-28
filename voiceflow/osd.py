@@ -57,10 +57,12 @@ class OSD:
         position: str = "bottom-center",
         dismiss_after_ms: int = 2000,
         notification_mode: str = "minimal",
+        show_errors: bool = True,
     ) -> None:
         self._position = position
         self._dismiss_ms = dismiss_after_ms
         self._mode = notification_mode  # "errors_only" | "minimal" | "verbose"
+        self._show_errors = show_errors
         self._proc: Optional[subprocess.Popen] = None
         self._lock = threading.Lock()
         self._use_qt = False
@@ -117,6 +119,9 @@ class OSD:
         self._send_or_notify(f"RESULT {preview}", f"✅  {preview}")
 
     def show_error(self, message: str) -> None:
+        if not self._show_errors:
+            log.warning("OSD show_error suppressed per configuration: %s", message)
+            return
         self._send_or_notify(f"ERROR {message}", f"❌  {message}")
 
     def hide(self) -> None:

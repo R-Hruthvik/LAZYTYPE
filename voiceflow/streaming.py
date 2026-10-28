@@ -181,14 +181,15 @@ class StreamingSession:
             t_stt_start = time.monotonic()
             error_msg: str | None = None
             try:
+                # Allow ample time for network requests and fallback providers (up to 45s)
                 text = await asyncio.wait_for(
                     self._chain.transcribe(audio, self._language),
-                    timeout=15.0,
+                    timeout=45.0,
                 )
             except asyncio.TimeoutError:
-                log.error("StreamingSession: transcription timed out after 15s")
+                log.error("StreamingSession: transcription timed out after 45s")
                 text = ""
-                error_msg = "Transcription timed out after 15s"
+                error_msg = "Transcription timed out after 45s"
             except Exception as exc:  # pylint: disable=broad-except
                 log.error("StreamingSession: transcription failed: %s", exc)
                 text = ""

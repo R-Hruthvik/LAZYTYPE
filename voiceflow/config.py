@@ -71,6 +71,7 @@ DEFAULT_CONFIG: dict = {
     "osd": {
         "position": "bottom-center",  # top-left | bottom-center | etc.
         "dismiss_after_ms": 2500,
+        "show_errors": False,
     },
 }
 
@@ -121,6 +122,7 @@ class Config:
     # OSD
     osd_position: str = "bottom-center"
     osd_dismiss_after_ms: int = 2500
+    osd_show_errors: bool = False
 
     def get_api_key(self, provider: str) -> str | None:
         """Read provider API key from environment (never from disk)."""
@@ -236,6 +238,7 @@ def load_config() -> Config:
         auto_sleep_seconds=int(s.get("auto_sleep_seconds", 120)),
         osd_position=o["position"],
         osd_dismiss_after_ms=o["dismiss_after_ms"],
+        osd_show_errors=bool(o.get("show_errors", False)),
     )
 
 

@@ -109,6 +109,32 @@ def _init_pystray() -> bool:
                 _patched_show
             )
 
+        # Monkeypatch pystray _xorg backend to render transparent icons crisply and encode titles safely
+        if hasattr(pystray, "_xorg") and hasattr(pystray._xorg, "Icon"):
+            def _patched_assert_icon_data(self, width, height):
+                if self._icon_data and self._icon_data.size == (width, height):
+                    return
+                # Match typical dark desktop panel background (#1E1E1E / 30,30,30)
+                self._icon_data = Image.new("RGB", (width, height), (30, 30, 30))
+                icon = self._icon
+                if hasattr(icon, "render_size"):
+                    icon = icon.render_size(width, height)
+                elif icon.size != (width, height):
+                    icon = icon.resize((width, height), Image.Resampling.LANCZOS)
+                if icon.mode == "RGBA":
+                    self._icon_data.paste(icon, mask=icon.split()[3])
+                else:
+                    self._icon_data.paste(icon)
+                self._icon_data.tostring = self._icon_data.tobytes
+
+            def _patched_update_title(self):
+                # Ensure title contains only latin-1/ascii characters to prevent Xlib encode error
+                safe_title = self.title.encode("ascii", "replace").decode("ascii")
+                self._window.set_wm_name(safe_title)
+
+            pystray._xorg.Icon._assert_icon_data = _patched_assert_icon_data
+            pystray._xorg.Icon._update_title = _patched_update_title
+
         _PYSTRAY_AVAILABLE = True
         return True
     except Exception as exc:
@@ -137,13 +163,13 @@ def _make_icon(
     state: str = "active",
     target_size: int = 128,
 ) -> "Image.Image":
-    """Generate a crisp high-res tray icon with 4x supersampled antialiasing."""
+    """Generate a crisp tray icon scaled dynamically to target_size."""
     scale = 4
     size = target_size * scale
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    margin = 8 * scale
+    margin = max(1, int(size * 0.06))
     # Draw base outer circle
     draw.ellipse([margin, margin, size - margin, size - margin], fill=color)
 
@@ -152,83 +178,111 @@ def _make_icon(
 
     if sleeping:
         # Subtle crescent moon and 'z' sleep indicator
-        mcx, mcy = size // 2 - 4 * scale, size // 2
-        r = 26 * scale
+        mcx, mcy = size // 2 - int(size * 0.04), size // 2
+        r = int(size * 0.22)
         draw.ellipse([mcx - r, mcy - r, mcx + r, mcy + r], fill="#E2E8F0")
         draw.ellipse(
-            [mcx - r + 16 * scale, mcy - r - 8 * scale, mcx + r + 16 * scale, mcy + r - 8 * scale],
+            [
+                mcx - r + int(size * 0.12),
+                mcy - r - int(size * 0.06),
+                mcx + r + int(size * 0.12),
+                mcy + r - int(size * 0.06),
+            ],
             fill=color,
         )
         # Crisp 'z'
-        zx, zy = size // 2 + 16 * scale, size // 2 - 24 * scale
-        draw.line([zx, zy, zx + 14 * scale, zy], fill="#E2E8F0", width=4 * scale)
-        draw.line([zx + 14 * scale, zy, zx, zy + 14 * scale], fill="#E2E8F0", width=4 * scale)
-        draw.line(
-            [zx, zy + 14 * scale, zx + 14 * scale, zy + 14 * scale], fill="#E2E8F0", width=4 * scale
-        )
+        zx, zy = size // 2 + int(size * 0.12), size // 2 - int(size * 0.20)
+        zw = max(1, int(size * 0.035))
+        zlen = int(size * 0.12)
+        draw.line([zx, zy, zx + zlen, zy], fill="#E2E8F0", width=zw)
+        draw.line([zx + zlen, zy, zx, zy + zlen], fill="#E2E8F0", width=zw)
+        draw.line([zx, zy + zlen, zx + zlen, zy + zlen], fill="#E2E8F0", width=zw)
     elif state == "transcribing":
         # Dedicated processing / transcribing audio waveform glyph
         cx, cy = size // 2, size // 2
-        bar_w = 8 * scale
-        bar_heights = [28 * scale, 48 * scale, 68 * scale, 48 * scale, 28 * scale]
-        bar_spacing = 14 * scale
-        total_w = len(bar_heights) * bar_w + (len(bar_heights) - 1) * (bar_spacing - bar_w)
-        start_x = cx - total_w // 2 + bar_w // 2
+        bar_w = max(1, int(size * 0.06))
+        bar_heights = [
+            int(size * 0.22),
+            int(size * 0.38),
+            int(size * 0.54),
+            int(size * 0.38),
+            int(size * 0.22),
+        ]
+        bar_spacing = max(bar_w + 1, int(size * 0.11))
+        total_w = len(bar_heights) * bar_spacing
+        start_x = cx - total_w // 2 + bar_spacing // 2
 
         for i, h in enumerate(bar_heights):
             x = start_x + i * bar_spacing
             draw.rounded_rectangle(
                 [x - bar_w // 2, cy - h // 2, x + bar_w // 2, cy + h // 2],
-                radius=bar_w // 2,
+                radius=max(1, bar_w // 2),
                 fill="#FFFFFF",
             )
     elif state == "error":
         cx, cy = size // 2, size // 2
-        draw.line([cx, cy - 28 * scale, cx, cy + 8 * scale], fill="#FFFFFF", width=8 * scale)
-        draw.ellipse(
-            [cx - 4 * scale, cy + 18 * scale, cx + 4 * scale, cy + 26 * scale], fill="#FFFFFF"
+        line_w = max(1, int(size * 0.07))
+        draw.line(
+            [cx, cy - int(size * 0.22), cx, cy + int(size * 0.06)],
+            fill="#FFFFFF",
+            width=line_w,
         )
+        dot_r = max(1, int(size * 0.035))
+        dot_y = cy + int(size * 0.16)
+        draw.ellipse([cx - dot_r, dot_y - dot_r, cx + dot_r, dot_y + dot_r], fill="#FFFFFF")
     else:
         # Inner microphone glyph
         cx, cy = size // 2, size // 2
-        cw, ch = 20 * scale, 40 * scale
+        cw, ch = int(size * 0.16), int(size * 0.32)
         mic_color = "#FFFFFF" if not paused else "#D1D5DB"
         draw.rounded_rectangle(
-            [cx - cw // 2, cy - ch // 2 - 8 * scale, cx + cw // 2, cy + ch // 2 - 8 * scale],
-            radius=10 * scale,
+            [cx - cw // 2, cy - ch // 2 - int(size * 0.06), cx + cw // 2, cy + ch // 2 - int(size * 0.06)],
+            radius=max(1, int(size * 0.08)),
             fill=mic_color,
         )
         # Mic stand / arc
+        arc_w = max(1, int(size * 0.05))
         draw.arc(
-            [cx - 20 * scale, cy - 12 * scale, cx + 20 * scale, cy + 28 * scale],
+            [
+                cx - int(size * 0.16),
+                cy - int(size * 0.10),
+                cx + int(size * 0.16),
+                cy + int(size * 0.22),
+            ],
             start=0,
             end=180,
             fill=mic_color,
-            width=6 * scale,
+            width=arc_w,
         )
         # Stand pole
-        draw.line([cx, cy + 28 * scale, cx, cy + 44 * scale], fill=mic_color, width=6 * scale)
+        draw.line(
+            [cx, cy + int(size * 0.22), cx, cy + int(size * 0.34)],
+            fill=mic_color,
+            width=arc_w,
+        )
         # Stand base
         draw.line(
-            [cx - 16 * scale, cy + 44 * scale, cx + 16 * scale, cy + 44 * scale],
+            [cx - int(size * 0.13), cy + int(size * 0.34), cx + int(size * 0.13), cy + int(size * 0.34)],
             fill=mic_color,
-            width=6 * scale,
+            width=arc_w,
         )
 
         if paused:
             # Draw red slash across
             draw.line(
                 [
-                    margin + 12 * scale,
-                    size - margin - 12 * scale,
-                    size - margin - 12 * scale,
-                    margin + 12 * scale,
+                    margin + int(size * 0.10),
+                    size - margin - int(size * 0.10),
+                    size - margin - int(size * 0.10),
+                    margin + int(size * 0.10),
                 ],
                 fill="#DC2626",
-                width=10 * scale,
+                width=max(1, int(size * 0.08)),
             )
 
-    return img.resize((target_size, target_size), Image.Resampling.LANCZOS)
+    res = img.resize((target_size, target_size), Image.Resampling.LANCZOS)
+    setattr(res, "render_size", lambda w, h: _make_icon(color, is_paused=is_paused, is_sleeping=is_sleeping, state=state, target_size=w))
+    return res
 
 
 class TrayIcon:
@@ -302,7 +356,12 @@ class TrayIcon:
         try:
             setattr(self._icon, "_state_name", icon_name)
             self._icon.icon = _make_icon(color, is_paused=is_paused, is_sleeping=is_sleeping, state=state)  # type: ignore[union-attr]
-            self._icon.title = title_str  # type: ignore[union-attr]
+            # Strip emojis for ASCII safety if Xorg backend is used
+            safe_title = title_str.encode("ascii", "replace").decode("ascii")
+            try:
+                self._icon.title = safe_title  # type: ignore[union-attr]
+            except Exception:
+                pass
             if hasattr(self._icon, "_appindicator") and getattr(self._icon, "_appindicator", None):
                 indicator = getattr(self._icon, "_appindicator")
 

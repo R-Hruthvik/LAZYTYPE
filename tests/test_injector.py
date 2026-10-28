@@ -30,7 +30,10 @@ class TestTextInjector:
         mock_acc = MagicMock()
         mock_acc.insert_text = MagicMock(return_value=True)
 
-        with patch.object(injector, "_inject_atspi", AsyncMock(return_value=True)) as mock_atspi:
+        with (
+            patch("voiceflow.injector._ATSPI_AVAILABLE", True),
+            patch.object(injector, "_inject_atspi", AsyncMock(return_value=True)) as mock_atspi,
+        ):
             res = await injector.inject("hello world", target_accessible=mock_acc)
             assert res is True
             mock_atspi.assert_called_once_with("hello world", mock_acc)

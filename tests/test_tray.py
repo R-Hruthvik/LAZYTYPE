@@ -134,10 +134,11 @@ def test_tray_set_state_with_mocked_appindicator():
     mock_icon._appindicator = mock_appind
     tray._icon = mock_icon
 
-    with patch("gi.repository.GLib.idle_add") as mock_idle_add:
+    mock_glib = MagicMock()
+    with patch.dict("sys.modules", {"gi": MagicMock(), "gi.repository": MagicMock(GLib=mock_glib)}):
         tray.set_state("transcribing")
         assert tray._current_state == "transcribing"
-        assert mock_idle_add.called
+        assert mock_glib.idle_add.called
 
         tray.set_state("active")
         assert tray._current_state == "active"

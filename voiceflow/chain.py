@@ -111,7 +111,11 @@ class ProviderChain:
                 current = state.name
                 log.debug("ProviderChain: trying %s", current)
 
-                text = await state.provider.transcribe(audio_bytes, language)
+                # Cap each individual provider call to 15s to allow failover to next provider
+                text = await asyncio.wait_for(
+                    state.provider.transcribe(audio_bytes, language),
+                    timeout=15.0,
+                )
 
                 # Reset error count on success
                 async with self._lock:
