@@ -1,19 +1,8 @@
-# Documentation & Markdown rules
-docs/
-agent/
-agents/
-agent*/
-agents.md
-*.md
-!README.md
-
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-
-# C extensions & Packaging
 .Python
 build/
 develop-eggs/
@@ -33,25 +22,8 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Unit test / coverage
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Environments & Secrets
+# Virtual environments
 .env
-.env.*
-!.env.example
 .venv
 env/
 venv/
@@ -59,13 +31,17 @@ ENV/
 env.bak/
 venv.bak/
 
-# IDE & Editor files
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
+# Packaging / PyInstaller
+packaging/
+*.spec
+run_lazytype.py
 
-# Operating System files
-.DS_Store
-Thumbs.db
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Local cache & logs
+.cache/
+*.log
