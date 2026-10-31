@@ -29,6 +29,9 @@ log = logging.getLogger(__name__)
 
 _CACHE_DIR = Path.home() / ".cache" / "voiceflow" / "icons"
 
+DOCK_RETRY_SECONDS = 2.0
+DOCK_MAX_RETRIES = 15
+
 _PYSTRAY_AVAILABLE = False
 pystray: Any = None
 Image: Any = None
@@ -129,11 +132,32 @@ def _init_pystray() -> bool:
 
             def _patched_update_title(self):
                 # Ensure title contains only latin-1/ascii characters to prevent Xlib encode error
-                safe_title = self.title.encode("ascii", "replace").decode("ascii")
-                self._window.set_wm_name(safe_title)
+                try:
+                    raw_title = getattr(self, "title", "VoiceFlow") or "VoiceFlow"
+                    safe_title = raw_title.encode("ascii", "replace").decode("ascii")
+                    self._window.set_wm_name(safe_title)
+                except Exception:
+                    pass
 
             pystray._xorg.Icon._assert_icon_data = _patched_assert_icon_data
             pystray._xorg.Icon._update_title = _patched_update_title
+
+            # Intercept pystray._base.Icon.title setter to guarantee safe encoding
+            try:
+                import pystray._base
+
+                orig_title_prop = pystray._base.Icon.title
+                orig_fset = orig_title_prop.fset
+
+                def _safe_title_setter(icon_self, value):
+                    if isinstance(value, str):
+                        value = value.encode("ascii", "replace").decode("ascii")
+                    if orig_fset:
+                        orig_fset(icon_self, value)
+
+                pystray._base.Icon.title = property(orig_title_prop.fget, _safe_title_setter)
+            except Exception:
+                pass
 
         _PYSTRAY_AVAILABLE = True
         return True
@@ -305,6 +329,9 @@ class TrayIcon:
         self._status_rows: list[dict] = []
         self._is_active: bool = True
         self._current_state: str = "active"
+        self._current_icon_image: Any = None
+        self._dock_retry_timer: Optional[threading.Timer] = None
+        self._dock_retry_attempts: int = 0
 
         if not _PYSTRAY_AVAILABLE:
             _init_pystray()
@@ -321,6 +348,7 @@ class TrayIcon:
                 self._icon.stop()  # type: ignore[union-attr]
             except Exception:
                 pass
+        self._stop_dock_retry()
 
     @property
     def is_active(self) -> bool:
@@ -355,7 +383,12 @@ class TrayIcon:
 
         try:
             setattr(self._icon, "_state_name", icon_name)
-            self._icon.icon = _make_icon(color, is_paused=is_paused, is_sleeping=is_sleeping, state=state)  # type: ignore[union-attr]
+            image = _make_icon(color, is_paused=is_paused, is_sleeping=is_sleeping, state=state)  # type: ignore[union-attr]
+            self._icon.icon = image
+            self._current_icon_image = image
+            # pystray swallows tray-docking failures (logs "Failed to dock icon")
+            # and leaves the icon undocked; retry until the tray accepts it.
+            self._maybe_schedule_dock_retry()
             # Strip emojis for ASCII safety if Xorg backend is used
             safe_title = title_str.encode("ascii", "replace").decode("ascii")
             try:
@@ -396,6 +429,54 @@ class TrayIcon:
                 pass
 
     # ------------------------------------------------------------------ #
+    # Tray dock retry — pystray swallows tray-docking failures (logs
+    # "Failed to dock icon") and leaves the icon undocked, so we retry
+    # until the tray (GNOME Shell / AppIndicator) accepts the icon.
+    # ------------------------------------------------------------------ #
+
+    def _maybe_schedule_dock_retry(self) -> None:
+        """Schedule a dock retry if the icon has not docked successfully yet."""
+        if self._dock_retry_timer is not None and self._dock_retry_timer.is_alive():
+            return
+        try:
+            if getattr(self._icon, "_icon_valid", False):
+                # Icon already docked / valid — nothing to retry.
+                return
+        except Exception:
+            return
+        if self._dock_retry_attempts >= DOCK_MAX_RETRIES:
+            return
+        self._dock_retry_attempts += 1
+        self._schedule_dock_retry()
+
+    def _schedule_dock_retry(self) -> None:
+        self._stop_dock_retry()
+        timer = threading.Timer(DOCK_RETRY_SECONDS, self._retry_dock)
+        timer.daemon = True
+        timer.start()
+        self._dock_retry_timer = timer
+
+    def _stop_dock_retry(self) -> None:
+        if self._dock_retry_timer is not None and self._dock_retry_timer.is_alive():
+            self._dock_retry_timer.cancel()
+        self._dock_retry_timer = None
+
+    def _retry_dock(self) -> None:
+        """Re-assign the icon image to trigger a fresh tray-dock attempt."""
+        self._dock_retry_timer = None
+        try:
+            if getattr(self._icon, "_icon_valid", False):
+                self._dock_retry_attempts = 0
+                return  # docked successfully — stop retrying
+            if self._dock_retry_attempts >= DOCK_MAX_RETRIES:
+                return
+            if self._current_icon_image is not None:
+                self._icon.icon = self._current_icon_image
+        except Exception as exc:  # pylint: disable=broad-except
+            log.debug("TrayIcon: dock retry error: %s", exc)
+        self._maybe_schedule_dock_retry()
+
+    # ------------------------------------------------------------------ #
     # Menu Actions
     # ------------------------------------------------------------------ #
 
@@ -425,7 +506,8 @@ class TrayIcon:
         try:
             import subprocess
 
-            subprocess.Popen(["notify-send", "VoiceFlow Status", msg], stderr=subprocess.DEVNULL)
+            proc = subprocess.Popen(["notify-send", "VoiceFlow Status", msg], stderr=subprocess.DEVNULL)
+            threading.Thread(target=proc.wait, daemon=True).start()
         except Exception:
             pass
 
@@ -434,12 +516,14 @@ class TrayIcon:
         try:
             import subprocess
 
-            subprocess.Popen(["xdg-open", str(config_path)], stderr=subprocess.DEVNULL)
+            proc = subprocess.Popen(["xdg-open", str(config_path)], stderr=subprocess.DEVNULL)
+            threading.Thread(target=proc.wait, daemon=True).start()
         except Exception:
             try:
                 import subprocess
 
-                subprocess.Popen(["gedit", str(config_path)], stderr=subprocess.DEVNULL)
+                proc = subprocess.Popen(["gedit", str(config_path)], stderr=subprocess.DEVNULL)
+                threading.Thread(target=proc.wait, daemon=True).start()
             except Exception:
                 pass
 
@@ -520,6 +604,8 @@ class TrayIcon:
                 self._icon._appindicator.set_icon_theme_path(str(_CACHE_DIR))
                 self._icon._appindicator.set_icon_full(icon_name, "VoiceFlow: ACTIVE")
 
+            # pystray swallows tray-docking failures at startup; retry until docked.
+            self._maybe_schedule_dock_retry()
             self._icon.run()  # type: ignore[union-attr]
         except Exception as exc:
             log.warning("TrayIcon: could not initialize system tray indicator: %s", exc)

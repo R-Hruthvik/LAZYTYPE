@@ -81,6 +81,36 @@ def test_tray_icon_state_transitions():
     assert tray._current_state == "paused"
 
 
+def test_tray_schedules_dock_retry_when_icon_not_valid():
+    """pystray swallows tray-docking failures (logs 'Failed to dock icon') and
+    leaves the icon undocked. TrayIcon should schedule a dock retry when the
+    icon has not docked successfully yet."""
+    tray = TrayIcon()
+    mock_icon = MagicMock()
+    mock_icon._icon_valid = False
+    tray._icon = mock_icon
+    tray._current_icon_image = MagicMock()
+
+    tray._maybe_schedule_dock_retry()
+    assert tray._dock_retry_timer is not None
+    assert tray._dock_retry_attempts == 1
+
+    tray._stop_dock_retry()
+    assert tray._dock_retry_timer is None
+
+
+def test_tray_no_dock_retry_when_icon_valid():
+    """No retry should be scheduled when the tray icon already reports valid."""
+    tray = TrayIcon()
+    mock_icon = MagicMock()
+    mock_icon._icon_valid = True
+    tray._icon = mock_icon
+    tray._current_icon_image = MagicMock()
+
+    tray._maybe_schedule_dock_retry()
+    assert tray._dock_retry_timer is None
+
+
 def test_tray_icon_sleep_action_callback():
     on_sleep_mock = MagicMock()
     tray = TrayIcon(on_sleep=on_sleep_mock)
