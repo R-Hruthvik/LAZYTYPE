@@ -180,16 +180,19 @@ class StreamingSession:
 
             t_stt_start = time.monotonic()
             error_msg: str | None = None
+            # Allow ample time for network requests and fallback providers.
+            # Scale with audio length — short utterances need ~15-45s, longer
+            # dictations (e.g. 1-5 min) legitimately need more headroom.
+            transcribe_timeout = max(45.0, audio_duration_s * 2.0 + 15.0)
             try:
-                # Allow ample time for network requests and fallback providers (up to 45s)
                 text = await asyncio.wait_for(
                     self._chain.transcribe(audio, self._language),
-                    timeout=45.0,
+                    timeout=transcribe_timeout,
                 )
             except asyncio.TimeoutError:
-                log.error("StreamingSession: transcription timed out after 45s")
+                log.error("StreamingSession: transcription timed out after %.1fs", transcribe_timeout)
                 text = ""
-                error_msg = "Transcription timed out after 45s"
+                error_msg = f"Transcription timed out after {transcribe_timeout:.0f}s"
             except Exception as exc:  # pylint: disable=broad-except
                 log.error("StreamingSession: transcription failed: %s", exc)
                 text = ""

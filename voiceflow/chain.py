@@ -111,10 +111,14 @@ class ProviderChain:
                 current = state.name
                 log.debug("ProviderChain: trying %s", current)
 
-                # Cap each individual provider call to 15s to allow failover to next provider
+                # Cap each individual provider call to allow failover to next provider.
+                # Scale with audio duration — Whisper inference time grows with audio
+                # length, so a fixed 15s cap spuriously times out longer dictations.
+                audio_duration_s = len(audio_bytes) / (16_000 * 2)  # 16kHz mono int16 = 32_000 B/s
+                provider_timeout = max(15.0, audio_duration_s * 2.0)
                 text = await asyncio.wait_for(
                     state.provider.transcribe(audio_bytes, language),
-                    timeout=15.0,
+                    timeout=provider_timeout,
                 )
 
                 # Reset error count on success
